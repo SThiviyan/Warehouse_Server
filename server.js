@@ -17,6 +17,18 @@ REST API for the Warehouse App
 */
 
 
+
+fastify.register(require('@fastify/postgres'),
+{
+    connectionString: 'mysql://'
+});
+
+fastify.get('/api/auth', function handler(request, reply)
+{
+    reply.send("test")
+})
+
+
 fastify.get('/', function handler(request, reply){
     reply.send({hello: 'world'})
 });
@@ -30,6 +42,7 @@ fastify.get('/api/user', async(request, reply) =>
 fastify.get('/users/:id', async(request, reply)=>{
     const newUser = {}
 });
+
 
 
 fastify.listen({port: 3000}, (err) => {
