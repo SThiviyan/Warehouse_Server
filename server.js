@@ -1,5 +1,9 @@
-const Fastify = require('fastify');
-const fastify = Fastify()
+const { default: fastifyJwt } = require('fastify-jwt');
+
+const fastify = require('fastify')();
+
+//import { Database } from './database.cjs';
+
 
 //GET Request for retrieving record
 //POST request creates a new record
@@ -18,15 +22,32 @@ REST API for the Warehouse App
 
 
 
+//Postgre Database
 fastify.register(require('@fastify/postgres'),
 {
-    connectionString: 'mysql://'
+    connectionString: 'postgres://postgres:JillCeq31082024@localhost:5432/warehouseapp'
 });
 
-fastify.get('/api/auth', function handler(request, reply)
-{
-    reply.send("test")
-})
+fastify.register(fastifyJwt, {
+    secret: process.env.JWT_SECRET || "",
+});
+
+
+
+
+//POST Requests
+
+fastify.post('/api/product/:newproduct',
+    { schema: productSchema},
+    
+)
+
+
+
+
+
+
+//GET Requests
 
 
 fastify.get('/', function handler(request, reply){
@@ -34,14 +55,55 @@ fastify.get('/', function handler(request, reply){
 });
 
 
-fastify.get('/api/user', async(request, reply) => 
+
+fastify.get('/api/auth', function handler(request, reply)
 {
-    return {}
+    reply.send("test")
+
+    
+    
+    /*
+    fastify.pg.query(
+        '', [request.params.id],
+        function onResult(err, result)
+        {
+            reply.send(err || result)
+        }
+    )
+    */
 });
 
-fastify.get('/users/:id', async(request, reply)=>{
-    const newUser = {}
+
+
+
+fastify.get('/api/users/:id', async(request, reply)=>{
+    try 
+    {
+        const result = await fastify.pg.query('SELECT * FROM users WHERE id = 1;')
+        reply.send(result.rows);
+    }
+    catch(err)
+    {
+        serverError();
+    }
+
 });
+
+
+
+
+fastify.get('/api/units',async(request, reply)=>{
+    try{
+        const result = await fastify.pg.query('SELECT * FROM units;', )
+        reply.send(result.rows);    
+    }
+    catch(err)
+    {
+        serverError();
+    } 
+});
+
+
 
 
 
@@ -51,4 +113,12 @@ fastify.listen({port: 3000}, (err) => {
         fastify.log.error(err)
         process.exit(1)
     }
+
+    serverError();
 });
+
+
+function serverError()
+{
+    reply.status(500).send({error: 'Internal Server error'});
+}
