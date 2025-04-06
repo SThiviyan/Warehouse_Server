@@ -94,7 +94,7 @@ fastify.post('/signup', async (req, reply) => {
             );
             
 
-            const token = fastify.jwt.sign({email});
+            const token = fastify.jwt.sign({username: email}, {expiresIn: '1h'});
             reply.send({token});
         }
         else
@@ -167,9 +167,8 @@ fastify.get('/api/userdata', {preHandler: [fastify.authenticate]}, async(request
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
         
-        console.log(decoded)
 
-        const result = await fastify.pg.query('SELECT * FROM users WHERE email = $1;', [decoded]);
+        const result = await fastify.pg.query('SELECT * FROM users WHERE email = $1;', [decoded.username]);
         reply.send(result.rows);
     }
     catch(err)
