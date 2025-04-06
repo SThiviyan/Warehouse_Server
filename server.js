@@ -1,5 +1,16 @@
 const { default: fastifyJwt } = require('fastify-jwt');
-const fastify = require('fastify')({ logger: true });
+const fs = require('node:fs')
+const path = require('node:path')
+const fastify = require('fastify')({ 
+    logger: true ,
+    http2: true,
+
+    // IN PRODUCTION PUT IN THE SERVERS SIGNED KEY AND CERT (LETSENCRYPT)
+    https: {
+        key: fs.readFileSync(path.join(__dirname, 'keys', 'myCA.key')),
+        cert: fs.readFileSync(path.join(__dirname, 'keys', 'myCA.pem')),
+    }
+});
 const fastifyPostgres = require('@fastify/postgres');
 const bcyrpt = require('bcrypt')
 const fastifyEnv = require('@fastify/env')
@@ -63,22 +74,33 @@ fastify.addHook("onSend", (request, reply, payload, done) => {
 
 //POST Requests
 fastify.post('/signup', async (req, reply) => {
-    const {username, password} = req.body
+    const {email, password} = req.body
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     try {
 
-
-        await fastify.pg.query(
-            'INSERT INTO users (email, password) VALUES ($1, $2)',
-            [username, hashedPassword]
+        const results = await fastify.pg.query(
+            'SELECT email FROM users WHERE email=$1;',
+            [email]
         );
 
-        const token = fastify.jwt.sign({username});
-        reply.send({token});
+        if(results.rowCount == 0)
+        {
+       
+            await fastify.pg.query(
+                'INSERT INTO users (email, password) VALUES ($1, $2)',
+                [email, hashedPassword]
+            );
+            
 
-        reply.err
+            const token = fastify.jwt.sign({email});
+            reply.send({token});
+        }
+        else
+        {
+            throw new Error('user already registered');
+        }
     }
     catch(err)
     {
@@ -103,14 +125,17 @@ fastify.post('/login', async (req, reply) => {
 
         const user = rows[0]
 
-        const isValid = await bcrypt.compare(password, user.password);
+        //const isValid = await bcrypt.compare(password, user.password);
+        var isValid = false
+        if(password == user.password)
+            isValid = true
 
         if(!isValid)
         {
             return reply.code(401).send({error: 'Invalid credentials'});
         }
 
-        const token = fastify.jwt.sign({username: user.email});
+        const token = fastify.jwt.sign({username: user.email}, {expiresIn: '1h'});
         reply.send({ token });
     }
     catch(err)
@@ -133,13 +158,18 @@ fastify.post('/api/product/:newproduct',
 
 
 fastify.get('/', function handler(request, reply){
-    reply.send({hello: 'world'})
+    reply.send("WarehouseApp REST API. Authenticate using /login or /signup");
 });
 
 fastify.get('/api/userdata', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
     try 
     {
-        const result = await fastify.pg.query('SELECT * FROM users WHERE id = 1;')
+        const token = request.headers.authorization.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+        
+        console.log(decoded)
+
+        const result = await fastify.pg.query('SELECT * FROM users WHERE email = $1;', [decoded]);
         reply.send(result.rows);
     }
     catch(err)
@@ -164,7 +194,7 @@ fastify.get('/api/currencies', {preHandler: [fastify.authenticate]}, async(reque
 });
 
 
-fastify.get('/api/units',async(request, reply)=>{       
+fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, reply)=>{       
     try{
         const result = await fastify.pg.query('SELECT * FROM units;',)
         reply.send(result.rows);
