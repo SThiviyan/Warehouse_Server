@@ -2,6 +2,8 @@ const { default: fastifyJwt } = require('fastify-jwt');
 const fastify = require('fastify')({ logger: true });
 const fastifyPostgres = require('@fastify/postgres');
 const bcyrpt = require('bcrypt')
+const fastifyEnv = require('@fastify/env')
+require('dotenv').config()
 
 
 //GET Request for retrieving record
@@ -22,16 +24,21 @@ REST API for the Warehouse App
 
 
 
-
 //Postgre Database
+
+const connectionString = 'postgres://' + process.env.DATABASE_USER + ':' + process.env.DATABASE_PASSWORD + '@' + process.env.DATABASE_DOMAIN + ':' + process.env.DATABASE_PORT + '/' + process.env.DATABASE_NAME;
 fastify.register(fastifyPostgres , {
-    connectionString: 'postgres://postgres:JillCeq31082024@localhost:5432/warehouseapp'
+    connectionString: connectionString
 });
 
-//JWT 
-fastify.register(require('fastify-jwt'), {
-    secret: 'secret'
+
+ //JWT 
+ fastify.register(require('fastify-jwt'), {
+    secret: process.env.JWT_SECRET
 });
+
+
+
 
 fastify.decorate("authenticate", async function(request, reply){
     try
@@ -157,11 +164,10 @@ fastify.get('/api/currencies', {preHandler: [fastify.authenticate]}, async(reque
 });
 
 
-fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, reply)=>{       
+fastify.get('/api/units',async(request, reply)=>{       
     try{
-        const result = await fastify.pg.query('SELECT * FROM units;', )
+        const result = await fastify.pg.query('SELECT * FROM units;',)
         reply.send(result.rows);
-        
     }
     catch(err)
     {
@@ -173,6 +179,10 @@ fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, re
 fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request, reply) => {
     try{
         const result = await fastify.pg.query('SELECT * FROM user_products WHERE owner_id == ;')
+    }
+    catch(err)
+    {
+
     }
 });
 
@@ -188,6 +198,7 @@ fastify.listen({port: 3000}, (err) => {
     }
 
     console.log("Server listening on Port 3000")
+    console.log(process.env)
     //serverError();
 });
 
