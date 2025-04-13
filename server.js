@@ -103,9 +103,6 @@ fastify.post('/signup', async (req, reply) => {
 
 
             const user = rows[0]
-
-
-
             reply.send({token, user});
         }
         else
@@ -156,6 +153,52 @@ fastify.post('/login', async (req, reply) => {
         reply.code(500).send({error: 'Login failed', details: err.message});
     }
 });
+
+
+fastify.post('/changePassword', {preHandler: [fastify.authenticate]},async (req, reply) => {
+    const {oldPassword, newPassword} = req.body
+
+    try{
+        const token = request.headers.split(' ')[1];
+        const decoded = fastify.jwt.decode(token)
+        const email = decoded.username
+
+        const {rows} = await fastify.pg.query(
+            'SELECT password FROM users WHERE users.email = $1;',
+            [email]
+        )
+
+
+        //IMPORTANT: check server response codes and replace with fitting ones
+
+        if(rows.length === 0)
+        {
+            return reply.code(401).send({error: 'Invalid credentials'});
+        }
+        
+
+        const result = rows[0]
+
+        if(result != oldPassword)
+        {
+            return reply.code(401).send({error: 'Invalid credentials'});
+        }
+
+
+        await fastify.pg.query(
+            'UPDATE users SET users.password=$1 WHERE users.email=$2;',
+            [newPassword, email]
+        )
+
+        //THINK ABOUT WHAT TO SEND BACK
+        reply.send({response: 'done.'});
+
+    }
+    catch(err)
+    {
+
+    }
+})
 
 
 fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
@@ -220,10 +263,22 @@ fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, re
 });
 
 fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request, reply) => {
+    
+    
     try{
 
+        const token = request.headers.authorization.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+
+        const email = decoded.username
+
         //JOIN Statement required
-        const result = await fastify.pg.query('SELECT * FROM user_products WHERE owner_id == ;')
+        const result = await fastify.pg.query(
+            'SELECT * FROM user_products INNER JOIN products ON products.id=user_products.id INNER JOIN users ON users.id=user_products.owner_id WHERE users.email = $1;',
+            [email]
+        )
+
+        reply.send({result});
     }
     catch(err)
     {
@@ -231,14 +286,30 @@ fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request
     }
 });
 
+
+//needs to be more efficient (streaming, zipping, etc.)
 fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request, reply) => {
+
+    const {productid} = req.body 
+
     try{
 
+
+        const token = request.headers.authorization.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+
+        const email = decoded.username
+        const  product = productid 
+
         //JOIN statement required 
-        const result = await fastify.pg.query('SELECT * FROM user_products WHERE owner_id == $1 AND id == $2;',
-            [email, ]
+        const queryresult = await fastify.pg.query(
+            'SELECT * FROM user_products INNER JOIN products ON products.id=user_products.id INNER JOIN users ON users.id=user_products.owner_id  WHERE users.email == $1 AND  user_products.id== $2;',
+            [email, product]
         )
 
+        const result = queryresult[0]
+
+        reply.send({result})
     }
     catch(err)
     {
@@ -260,7 +331,6 @@ fastify.listen({port: 3000}, (err) => {
 
     console.log("Server listening on Port 3000")
     console.log(process.env)
-    //serverError();
 });
 
 
