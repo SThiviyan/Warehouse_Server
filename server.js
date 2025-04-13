@@ -73,7 +73,7 @@ fastify.addHook("onSend", (request, reply, payload, done) => {
 
 
 //POST Requests
-fastify.post('/signup', async (req, reply) => {
+fastify.post('/api/signup', async (req, reply) => {
     const {email, password} = req.body
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -116,7 +116,7 @@ fastify.post('/signup', async (req, reply) => {
     }
 });
 
-fastify.post('/login', async (req, reply) => {
+fastify.post('/api/login', async (req, reply) => {
     const {username, password} = req.body;
 
     try
@@ -155,7 +155,7 @@ fastify.post('/login', async (req, reply) => {
 });
 
 
-fastify.post('/changePassword', {preHandler: [fastify.authenticate]},async (req, reply) => {
+fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (req, reply) => {
     const {oldPassword, newPassword} = req.body
 
     try{
@@ -240,6 +240,26 @@ fastify.get('/api/currencies', {preHandler: [fastify.authenticate]}, async(reque
     
     try{
         const result = await fastify.pg.query('SELECT * FROM currencies;',)
+
+        reply.send(result.rows);
+    }
+    catch(err)
+    {
+        serverError()
+    }
+});
+
+fastify.get('/api/categories', {preHandler: [fastify.authenticate]}, async(request, reply) => {
+    
+    try{
+        const token = request.headers.authorization.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+        const email = decoded.username;
+
+        const result = await fastify.pg.query(
+            'SELECT categories.name FROM categories INNER JOIN users ON users.id = categories.user_id WHERE users.email=$1;',
+            [email]
+        );
 
         reply.send(result.rows);
     }
