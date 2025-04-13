@@ -95,7 +95,18 @@ fastify.post('/signup', async (req, reply) => {
             
 
             const token = fastify.jwt.sign({username: email}, {expiresIn: '1h'});
-            reply.send({token});
+
+            const {rows} = await fastify.pg.query(
+                'SELECT * FROM users WHERE email=$1',
+                [email]
+            );
+
+
+            const user = rows[0]
+
+
+
+            reply.send({token, user});
         }
         else
         {
@@ -136,7 +147,9 @@ fastify.post('/login', async (req, reply) => {
         }
 
         const token = fastify.jwt.sign({username: user.email}, {expiresIn: '1h'});
-        reply.send({ token });
+        
+        reply.send({token, user});
+
     }
     catch(err)
     {
@@ -144,11 +157,12 @@ fastify.post('/login', async (req, reply) => {
     }
 });
 
-/*
-fastify.post('/api/product/:newproduct',
-    { schema: productSchema},
-);
-*/    
+
+fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
+    const {productname, barcode, description, price, size, unit, currency, } = req.body
+
+});
+    
 
 
 
@@ -207,12 +221,30 @@ fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, re
 
 fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request, reply) => {
     try{
+
+        //JOIN Statement required
         const result = await fastify.pg.query('SELECT * FROM user_products WHERE owner_id == ;')
     }
     catch(err)
     {
 
     }
+});
+
+fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request, reply) => {
+    try{
+
+        //JOIN statement required 
+        const result = await fastify.pg.query('SELECT * FROM user_products WHERE owner_id == $1 AND id == $2;',
+            [email, ]
+        )
+
+    }
+    catch(err)
+    {
+
+    }
+
 });
 
 
