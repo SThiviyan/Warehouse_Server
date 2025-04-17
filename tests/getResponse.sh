@@ -25,7 +25,7 @@ echo "✅ Token: $TOKEN"
 
 echo "➡️ Requesting response..."
 
-RESPONSE=$(curl -k -s -X GET "$BASE_URL/api/userdata" \
+RESPONSE=$(curl -k -s -X GET "$BASE_URL/user" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json")
 

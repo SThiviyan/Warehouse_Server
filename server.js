@@ -287,7 +287,7 @@ fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request
                 reply.status(500).send({error: 'update product failed'});
             }
 
-            reply.status(200).send();
+            reply.status(200).send({productid: rows[0].id});
         
         }
         else
@@ -306,7 +306,7 @@ fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request
             }
 
             //response
-            reply.status(201).send()
+            reply.status(201).send({product_id: rows[0].id})
        }
               
     }
@@ -464,8 +464,6 @@ fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request,
     const {productid} = req.body 
 
     try{
-
-
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
         const email = decoded.username
@@ -491,6 +489,99 @@ fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request,
 //
 //  DELETE Requests
 //
+
+
+fastify.delete('api/user', {preHandler: fastify.authenticate}, async (request, reply) => {
+   
+    try
+    {
+        const token = request.headers.split(' ')[1];
+        const decodedToken = fastify.jwt.decode(token);
+        const email = decodedToken.username
+
+        const {rows} = await fastify.pg.query(
+            'SELECT id FROM users WHERE email=$1;'
+            , [email]);
+
+        const id = rows[0].id
+
+        await fastify.pg.query('DELETE FROM categories WHERE user_id=$1;', [id]);
+        await fastify.pg.query('DELETE FROM user_products WHERE owner_id=$1;', [id]);
+        await fastify.pg.query('DELETE FROM users WHERE id=$1;', [id]);
+
+        reply.status(200).send();
+    }
+    catch(error)
+    {
+        reply.status(500).send({error: 'deletion failed'});
+    }
+});
+
+
+
+fastify.delete('api/product', {preHandler: fastify.authenticate}, async (request, reply) => {
+    const {productid} = request.body
+
+    try
+    {
+
+        const {rows} = await fastify.pg.query('SELECT photo FROM user_products WHERE id=$1;',
+            [productid]
+        );
+
+        const imageName = rows[0].photo;
+
+        deleteImage(image);
+
+        await fastify.pg.query('DELETE FROM user_products WHERE id=$1;',
+            [productid]
+        );
+
+
+
+        reply.status(200).send();
+    }
+    catch(error)
+    {
+        reply.status(500).send({error: 'deletion failed'});
+    }
+});
+
+function deleteImage(image)
+{
+
+}
+
+
+fastify.delete('api/category', {preHandler: fastify.authenticate}, async (request, reply) => {
+    const {categoryname} = request.body
+    
+    try
+    {
+        const token = request.headers.split(' ')[1];
+        const decodedToken = fastify.jwt.decode(token);
+        const email = decodedToken.username
+
+        const {rows} = await fastify.pg.query(
+            'SELECT id FROM users WHERE email=$1;'
+            , [email]);
+
+        const id = rows[0].id
+
+
+        await fastify.pg.query(
+            'DELETE FROM categories WHERE user_id=$1 AND name=$2;',
+            [id, categoryname]
+        );
+
+
+        reply.status(200).send();
+    }
+    catch(error)
+    {
+        reply.status(500).send({error: 'deletion failed'});
+    }
+});
 
 
 
