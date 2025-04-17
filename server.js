@@ -12,8 +12,9 @@ const fastify = require('fastify')({
     }
 });
 const fastifyPostgres = require('@fastify/postgres');
-const bcyrpt = require('bcrypt')
-const fastifyEnv = require('@fastify/env')
+const helmet = require('@fastify/helmet');
+const bcyrpt = require('bcrypt');
+const { type } = require('node:os');
 require('dotenv').config()
 
 
@@ -48,6 +49,17 @@ fastify.register(fastifyPostgres , {
     secret: process.env.JWT_SECRET
 });
 
+//helmet
+fastify.register(helmet, {
+  global: true,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: [`'self'`]
+    }
+  },
+  hsts: { maxAge: 31536000 }
+})
+
 
 
 
@@ -62,6 +74,10 @@ fastify.decorate("authenticate", async function(request, reply){
     }
 });
 
+fastify.decorate("", async function(request, reply){
+    //logs what the user requested on what device, for device synchronization 
+});
+
 
 
 
@@ -72,7 +88,12 @@ fastify.addHook("onSend", (request, reply, payload, done) => {
 });
 
 
-//POST Requests
+
+
+//
+//  POST Requests
+//
+
 fastify.post('/api/signup', async (req, reply) => {
     const {email, password} = req.body
 
@@ -107,12 +128,12 @@ fastify.post('/api/signup', async (req, reply) => {
         }
         else
         {
-            throw new Error('user already registered');
+            reply.code(400).send({error: 'User already registered'});
         }
     }
     catch(err)
     {
-        reply.code(500).send({error: 'User registration failed', details: err.message});   
+        reply.code(500).send({error: 'User registration failed'});   
     }
 });
 
@@ -128,7 +149,7 @@ fastify.post('/api/login', async (req, reply) => {
 
         if(rows.length === 0)
         {
-            return reply.code(401).send({error: 'Invalid credentials'});
+            return reply.code(400).send({error: 'User does not exist'});
         }
 
         const user = rows[0]
@@ -136,11 +157,13 @@ fastify.post('/api/login', async (req, reply) => {
         //const isValid = await bcrypt.compare(password, user.password);
         var isValid = false
         if(password == user.password)
+        {
             isValid = true
+        }
 
         if(!isValid)
         {
-            return reply.code(401).send({error: 'Invalid credentials'});
+            return reply.code(400).send({error: 'Invalid credentials'});
         }
 
         const token = fastify.jwt.sign({username: user.email}, {expiresIn: '1h'});
@@ -150,7 +173,7 @@ fastify.post('/api/login', async (req, reply) => {
     }
     catch(err)
     {
-        reply.code(500).send({error: 'Login failed', details: err.message});
+        reply.code(500).send({error: 'login failed'});
     }
 });
 
@@ -159,6 +182,9 @@ fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (
     const {oldPassword, newPassword} = req.body
 
     try{
+
+        //if(typeof(oldPassword) == BigInt && typeof(newPassword) == BigInt)
+
         const token = request.headers.split(' ')[1];
         const decoded = fastify.jwt.decode(token)
         const email = decoded.username
@@ -179,6 +205,8 @@ fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (
 
         const result = rows[0]
 
+        //hashed passwort or something here!
+
         if(result != oldPassword)
         {
             return reply.code(401).send({error: 'Invalid credentials'});
@@ -191,46 +219,174 @@ fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (
         )
 
         //THINK ABOUT WHAT TO SEND BACK
-        reply.send({response: 'done.'});
+        reply.status(200).send();
 
     }
     catch(err)
     {
-
+        reply.status(500).send({error: 'passwordchange failed'});
     }
 })
 
 
 fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
-    const {productname, barcode, description, price, size, unit, currency, } = req.body
+    const {id, productname, barcode, description, price, size, unit, currency, photoname} = req.body
 
+    //created_at and photo are added later; owner_id is added via JWT, and product_id is added from products; If barcode is accsseible add it to products
+
+    try{
+
+        //Decodes JWT to email
+        const token = request.headers.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+        const email = decoded.username;
+
+
+        //checks if barcode is already registered / if no barcode is provided (0) it will hopefully return the id = 0
+        const {rows} = await fastify.pg.query(
+            'SELECT id FROM products WHERE barcode=$1;',
+            [barcode]
+        );
+
+        //gets product id from table products
+        var product_id = rows[0].id;
+
+        //if no product is registered with the barcode 
+        if(rows.rowCount == 0)
+        {
+            //will only be executed if barcode is not 0
+            const {rows} = await fastify.pg.query('INSERT INTO products (name, barcode) VALUES ($1, $2) RETURNING id;',
+                [productname, barcode]
+            )
+
+
+            // resets product_id
+            product_id = rows[0].id
+        }
+      
+
+        //get the user_id from users table
+        const user_id_rows = await fastify.pg.query('SELECT id FROM users WHERE email=$1', [email]);
+        const user_id = user_id_rows.rows[0].id
+
+        //selects product from id (if id == 0, no product will be returned)
+        const {userproducts} = await fastify.pg.query(
+            'SELECT * FROM user_products WHERE id=$1;',
+            [id]
+        );
+            
+        if(userproducts.rowCount > 0)
+        {   
+
+            let {rows} = await fastify.pg.query('UPDATE user_products SET custom_name=$2,description=$3, price=$4, size=$5, unit_id=$6, currency_id=$7, photo=$8 WHERE id=$1 RETURNING *;',
+                        [id, productname, description, price, size, unit, currency, photoname]
+                );
+                
+            if(rows.rowCount == 0)
+            {
+                reply.status(500).send({error: 'update product failed'});
+            }
+
+            reply.status(200).send();
+        
+        }
+        else
+        {
+            //Inserts product into the user_products table and lets postgres do the automatic id numbering
+            let {rows} = await fastify.pg.query('INSERT INTO user_products (owner_id, product_id, custom_name, description, price, size, unit_id, currency_id, photo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;',
+                  [user_id, product_id, productname, description, price, size, unit, currency, photoname]
+            );
+
+
+            //If Row wasnt added:
+            if(rows.rowCount == 0)
+            {
+                //ERROR
+               reply.status(500).send({error: 'insert product failed'});
+            }
+
+            //response
+            reply.status(201).send()
+       }
+              
+    }
+    catch(error)
+    {
+        reply.status(400).send({error: 'request failed'})
+    }
+});
+
+
+
+fastify.post('/api/category', {preHandler: [fastify.authenticate]}, async(request, reply) => {
+    const {categoryname} = request.body
+
+    try
+    {
+        const token = request.headers.split(' ')[1];
+        const decoded = fastify.jwt.decode(token);
+        const email = decoded.email;
+
+        const {rows} = await fastify.pg.query(
+            'SELECT id FROM users WHERE email=$1;',
+            [email]
+        );
+
+        if(rows.rowCount > 0)
+        {
+            const user_id = rows[0].id 
+
+            const {response} = await fastify.pg.query(
+                'INSERT INTO categories(user_id, name) VALUES($1, $2) RETURNING *;',
+                [user_id, categoryname]
+            );
+
+            if(response.rowCount == 0)
+            {
+                reply.status(500).send({error: 'insert category failed'});
+            }
+            else
+            {
+                reply.status(201).send();
+            }
+        }
+        else
+        {
+            reply.status(401).send({error: 'invalid credentials'});
+        }
+
+
+    }
+    catch(error)
+    {
+        reply.status(500).send({error: 'category add failed'});
+    }
 });
     
 
 
 
 
-
-//GET Requests
-
+//
+//  GET Requests
+//
 
 fastify.get('/', function handler(request, reply){
     reply.send("WarehouseApp REST API. Authenticate using /login or /signup");
 });
 
-fastify.get('/api/userdata', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
+fastify.get('/api/user', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
     try 
     {
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
         
-
         const result = await fastify.pg.query('SELECT * FROM users WHERE email = $1;', [decoded.username]);
         reply.send(result.rows);
     }
     catch(err)
     {
-        serverError();
+        reply.status(500).send({error: 'request failed'});
     }
 
 });
@@ -240,12 +396,11 @@ fastify.get('/api/currencies', {preHandler: [fastify.authenticate]}, async(reque
     
     try{
         const result = await fastify.pg.query('SELECT * FROM currencies;',)
-
         reply.send(result.rows);
     }
     catch(err)
     {
-        serverError()
+        reply.status(500).send({error: 'request failed'});
     }
 });
 
@@ -255,17 +410,15 @@ fastify.get('/api/categories', {preHandler: [fastify.authenticate]}, async(reque
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
         const email = decoded.username;
-
         const result = await fastify.pg.query(
             'SELECT categories.name FROM categories INNER JOIN users ON users.id = categories.user_id WHERE users.email=$1;',
             [email]
         );
-
         reply.send(result.rows);
     }
     catch(err)
     {
-        serverError()
+        reply.status(500).send({error: 'request failed'});
     }
 });
 
@@ -277,7 +430,7 @@ fastify.get('/api/units', {preHandler: [fastify.authenticate]},async(request, re
     }
     catch(err)
     {
-        serverError();
+        reply.status(500).send({error: 'request failed'});
     } 
     
 });
@@ -289,10 +442,8 @@ fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request
 
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
-
         const email = decoded.username
-
-        //JOIN Statement required
+        //JOIN Statement needs to be tested
         const result = await fastify.pg.query(
             'SELECT * FROM user_products INNER JOIN products ON products.id=user_products.id INNER JOIN users ON users.id=user_products.owner_id WHERE users.email = $1;',
             [email]
@@ -302,7 +453,7 @@ fastify.get('/api/products', {preHandler: [fastify.authenticate]}, async(request
     }
     catch(err)
     {
-
+        reply.status(500).send({error: 'request failed'});
     }
 });
 
@@ -317,30 +468,41 @@ fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request,
 
         const token = request.headers.authorization.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
-
         const email = decoded.username
-        const  product = productid 
-
         //JOIN statement required 
         const queryresult = await fastify.pg.query(
             'SELECT * FROM user_products INNER JOIN products ON products.id=user_products.id INNER JOIN users ON users.id=user_products.owner_id  WHERE users.email == $1 AND  user_products.id== $2;',
-            [email, product]
-        )
-
-        const result = queryresult[0]
-
-        reply.send({result})
+            [email, productid]
+        );
+        const result = queryresult[0];
+        reply.send({result});
     }
     catch(err)
     {
-
+        reply.status(500).send({error: 'request failed'});
     }
-
 });
 
 
 
-//Server Listen
+
+
+
+//
+//  DELETE Requests
+//
+
+
+
+
+
+
+
+
+
+//
+//  Server Listen
+//
 
 fastify.listen({port: 3000}, (err) => {
     if(err)
@@ -348,13 +510,9 @@ fastify.listen({port: 3000}, (err) => {
         fastify.log.error(err)
         process.exit(1)
     }
-
     console.log("Server listening on Port 3000")
     console.log(process.env)
 });
 
 
-function serverError()
-{
-    reply.status(500).send({error: 'Internal Server error'});
-}
+
