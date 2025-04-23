@@ -115,7 +115,7 @@ fastify.post('/api/signup', async (req, reply) => {
             );
             
 
-            const token = fastify.jwt.sign({username: email}, {expiresIn: '1h'});
+            const token = fastify.jwt.sign({username: email}, {expiresIn: '7d'});
 
             const {rows} = await fastify.pg.query(
                 'SELECT * FROM users WHERE email=$1',
@@ -219,7 +219,7 @@ fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (
         )
 
         //THINK ABOUT WHAT TO SEND BACK
-        reply.status(200).send();
+        reply.status(200).send({token});
 
     }
     catch(err)
@@ -491,7 +491,7 @@ fastify.get('/api/product', {preHandler: [fastify.authenticate]}, async(request,
 //
 
 
-fastify.delete('api/user', {preHandler: fastify.authenticate}, async (request, reply) => {
+fastify.delete('/api/user', {preHandler: fastify.authenticate}, async (request, reply) => {
    
     try
     {
@@ -519,7 +519,7 @@ fastify.delete('api/user', {preHandler: fastify.authenticate}, async (request, r
 
 
 
-fastify.delete('api/product', {preHandler: fastify.authenticate}, async (request, reply) => {
+fastify.delete('/api/product', {preHandler: fastify.authenticate}, async (request, reply) => {
     const {productid} = request.body
 
     try
@@ -553,7 +553,7 @@ function deleteImage(image)
 }
 
 
-fastify.delete('api/category', {preHandler: fastify.authenticate}, async (request, reply) => {
+fastify.delete('/api/category', {preHandler: fastify.authenticate}, async (request, reply) => {
     const {categoryname} = request.body
     
     try
@@ -595,7 +595,7 @@ fastify.delete('api/category', {preHandler: fastify.authenticate}, async (reques
 //  Server Listen
 //
 
-fastify.listen({port: 3000}, (err) => {
+fastify.listen({port: 3000, host: '0.0.0.0'}, (err) => {
     if(err)
     {
         fastify.log.error(err)
