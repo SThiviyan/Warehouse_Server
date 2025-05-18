@@ -385,18 +385,31 @@ fastify.post('/api/category', {preHandler: [fastify.authenticate]}, async(reques
         {
             const user_id = rows[0].id 
 
-            const {response} = await fastify.pg.query(
-                'INSERT INTO categories(user_id, name) VALUES($1, $2) RETURNING *;',
+            const {category} = await fastify.pg.query(
+                'SELECT name FROM categories WHERE user_id=$1 AND name=$2;',
                 [user_id, categoryname]
             );
 
-            if(response.rowCount == 0)
+            if(category.rowCount < 0)
             {
-                reply.status(500).send({error: 'insert category failed'});
+
+                const {response} = await fastify.pg.query(
+                    'INSERT INTO categories(user_id, name) VALUES($1, $2) RETURNING *;',
+                    [user_id, categoryname]
+                );
+
+                if(response.rowCount == 0)
+                {
+                    reply.status(500).send({error: 'insert category failed'});
+                }
+                else
+                {
+                    reply.status(201).send({success});
+                }
             }
             else
             {
-                reply.status(201).send({success});
+                reply.status(500).send({error: 'category already exists'})
             }
         }
         else
