@@ -289,7 +289,7 @@ fastify.post('/api/product', {preHandler: [fastify.authenticate]}, async(request
         const token = request.headers.split(' ')[1];
         const decoded = fastify.jwt.decode(token);
         const email = decoded.username;
-
+        
 
         //checks if barcode is already registered / if no barcode is provided (0) it will hopefully return the id = 0
         const {rows} = await fastify.pg.query(
