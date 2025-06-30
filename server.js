@@ -230,7 +230,7 @@ fastify.post('/api/changePassword', {preHandler: [fastify.authenticate]},async (
 })
 
 
-fastify.post('api/user', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
+fastify.post('/api/user', {preHandler: [fastify.authenticate]}, async(request, reply)=>{
     const {id, email, password, login_method, is_active, created_at, currency, metric} = request.body
 
     try{
